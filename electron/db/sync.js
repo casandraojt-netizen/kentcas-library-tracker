@@ -15,7 +15,25 @@ async function checkConnectivity() {
 
 async function getPgClient() {
   if (pgClient) return pgClient
-  const connectionString = process.env.NEON_DATABASE_URL
+
+  // Check both process.env (from .env file) and the saved settings file
+  let connectionString = process.env.NEON_DATABASE_URL
+  if (!connectionString) {
+    try {
+      const { app } = require('electron')
+      const fs = require('fs')
+      const path = require('path')
+      const settingsPath = path.join(app.getPath('userData'), 'settings.json')
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+        if (settings.neonUrl) {
+          connectionString = settings.neonUrl
+          process.env.NEON_DATABASE_URL = connectionString
+        }
+      }
+    } catch (_) {}
+  }
+
   if (!connectionString) return null
   try {
     const { Client } = require('pg')
@@ -87,7 +105,12 @@ async function runSync() {
   if (!online) { if (isOnline) { isOnline = false; emit({ type: 'offline' }) } return }
   if (!isOnline) { isOnline = true; emit({ type: 'online' }) }
   const client = await getPgClient()
-  if (!client) { emit({ type: 'error', message: 'Cannot connect to Neon. Check NEON_DATABASE_URL in Settings.' }); return }
+  if (!client) {
+    // No URL configured at all — stay silent, not an error
+    const hasUrl = !!(process.env.NEON_DATABASE_URL)
+    if (hasUrl) emit({ type: 'error', message: 'Cannot connect to Neon. Check your URL in Settings.' })
+    return
+  }
   try {
     emit({ type: 'syncing' })
     const pushed = await syncUp(client)
