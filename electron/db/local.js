@@ -35,6 +35,7 @@ function initDb() {
       rss_feed_url TEXT DEFAULT '',
       rss_last_item_title TEXT DEFAULT '',
       rss_last_item_date TEXT,
+      rss_last_item_url TEXT DEFAULT '',
       rss_has_update INTEGER DEFAULT 0,
       rss_last_checked TEXT,
       created_at TEXT NOT NULL,
@@ -57,6 +58,7 @@ function initDb() {
   migrate(`ALTER TABLE books ADD COLUMN rss_has_update INTEGER DEFAULT 0`)
   migrate(`ALTER TABLE books ADD COLUMN rss_last_checked TEXT`)
   migrate(`ALTER TABLE books ADD COLUMN rss_last_item_date TEXT`)
+  migrate(`ALTER TABLE books ADD COLUMN rss_last_item_url TEXT DEFAULT ''`)
   migrate(`ALTER TABLE books ADD COLUMN is_r18 INTEGER DEFAULT 0`)
   migrate(`ALTER TABLE books ADD COLUMN tags TEXT DEFAULT ''`)
 
@@ -89,12 +91,12 @@ function upsertBook(book) {
     INSERT INTO books (
       id, collection, title, author, cover_url, genre, status, status_changed_at,
       current_chapter, total_chapters, year, is_favorite, notes, tags, is_r18, source_url, web_type,
-      rss_feed_url, rss_last_item_title, rss_last_item_date, rss_has_update, rss_last_checked,
+      rss_feed_url, rss_last_item_title, rss_last_item_date, rss_last_item_url, rss_has_update, rss_last_checked,
       created_at, updated_at, synced, deleted
     ) VALUES (
       @id, @collection, @title, @author, @cover_url, @genre, @status, @status_changed_at,
       @current_chapter, @total_chapters, @year, @is_favorite, @notes, @tags, @is_r18, @source_url, @web_type,
-      @rss_feed_url, @rss_last_item_title, @rss_last_item_date, @rss_has_update, @rss_last_checked,
+      @rss_feed_url, @rss_last_item_title, @rss_last_item_date, @rss_last_item_url, @rss_has_update, @rss_last_checked,
       @created_at, @updated_at, @synced, @deleted
     )
     ON CONFLICT(id) DO UPDATE SET
@@ -104,7 +106,8 @@ function upsertBook(book) {
       year=excluded.year, is_favorite=excluded.is_favorite, notes=excluded.notes, tags=excluded.tags, is_r18=excluded.is_r18,
       source_url=excluded.source_url, web_type=excluded.web_type,
       rss_feed_url=excluded.rss_feed_url, rss_last_item_title=excluded.rss_last_item_title,
-      rss_last_item_date=excluded.rss_last_item_date, rss_has_update=excluded.rss_has_update,
+      rss_last_item_date=excluded.rss_last_item_date, rss_last_item_url=excluded.rss_last_item_url,
+      rss_has_update=excluded.rss_has_update,
       rss_last_checked=excluded.rss_last_checked,
       updated_at=excluded.updated_at, synced=excluded.synced, deleted=excluded.deleted
   `).run({
@@ -128,6 +131,7 @@ function upsertBook(book) {
     rss_feed_url: book.rss_feed_url || '',
     rss_last_item_title: book.rss_last_item_title || '',
     rss_last_item_date: book.rss_last_item_date || null,
+    rss_last_item_url: book.rss_last_item_url || '',
     rss_has_update: book.rss_has_update ? 1 : 0,
     rss_last_checked: book.rss_last_checked || null,
     created_at: book.created_at || now,
@@ -171,10 +175,10 @@ function getBooksWithRssFeed() {
   return getDb().prepare(`SELECT * FROM books WHERE rss_feed_url != '' AND rss_feed_url IS NOT NULL AND deleted = 0`).all().map(deserializeBook)
 }
 
-function markRssUpdate(id, latestTitle, hasUpdate, latestDate) {
+function markRssUpdate(id, latestTitle, hasUpdate, latestDate, latestUrl) {
   const now = new Date().toISOString()
-  const result = getDb().prepare(`UPDATE books SET rss_has_update = ?, rss_last_item_title = ?, rss_last_item_date = ?, rss_last_checked = ?, synced = 0, updated_at = ? WHERE id = ?`)
-    .run(hasUpdate ? 1 : 0, latestTitle, latestDate || null, now, now, id)
+  const result = getDb().prepare(`UPDATE books SET rss_has_update = ?, rss_last_item_title = ?, rss_last_item_date = ?, rss_last_item_url = ?, rss_last_checked = ?, synced = 0, updated_at = ? WHERE id = ?`)
+    .run(hasUpdate ? 1 : 0, latestTitle, latestDate || null, latestUrl || '', now, now, id)
   if (result.changes === 0) {
     console.warn(`[markRssUpdate] No rows updated for id: ${id} — book may not exist in SQLite`)
   } else {

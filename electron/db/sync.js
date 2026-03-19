@@ -70,15 +70,15 @@ async function syncUp(client) {
   if (!unsynced.length) return 0
   for (const book of unsynced) {
     await client.query(`
-      INSERT INTO books (id,collection,title,author,cover_url,genre,status,status_changed_at,current_chapter,total_chapters,year,is_favorite,notes,tags,is_r18,source_url,web_type,rss_feed_url,rss_last_item_title,rss_last_item_date,rss_has_update,rss_last_checked,created_at,updated_at,deleted)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+      INSERT INTO books (id,collection,title,author,cover_url,genre,status,status_changed_at,current_chapter,total_chapters,year,is_favorite,notes,tags,is_r18,source_url,web_type,rss_feed_url,rss_last_item_title,rss_last_item_date,rss_last_item_url,rss_has_update,rss_last_checked,created_at,updated_at,deleted)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
       ON CONFLICT(id) DO UPDATE SET
         title=EXCLUDED.title,author=EXCLUDED.author,cover_url=EXCLUDED.cover_url,genre=EXCLUDED.genre,
         status=EXCLUDED.status,status_changed_at=EXCLUDED.status_changed_at,current_chapter=EXCLUDED.current_chapter,
         total_chapters=EXCLUDED.total_chapters,year=EXCLUDED.year,is_favorite=EXCLUDED.is_favorite,
         notes=EXCLUDED.notes,tags=EXCLUDED.tags,is_r18=EXCLUDED.is_r18,source_url=EXCLUDED.source_url,web_type=EXCLUDED.web_type,
         rss_feed_url=EXCLUDED.rss_feed_url,rss_last_item_title=EXCLUDED.rss_last_item_title,
-        rss_last_item_date=EXCLUDED.rss_last_item_date,rss_has_update=EXCLUDED.rss_has_update,
+        rss_last_item_date=EXCLUDED.rss_last_item_date,rss_last_item_url=EXCLUDED.rss_last_item_url,rss_has_update=EXCLUDED.rss_has_update,
         rss_last_checked=EXCLUDED.rss_last_checked,
         updated_at=EXCLUDED.updated_at,deleted=EXCLUDED.deleted
       WHERE EXCLUDED.updated_at > books.updated_at
@@ -103,6 +103,7 @@ async function syncUp(client) {
       book.rss_feed_url || '',
       book.rss_last_item_title || '',
       book.rss_last_item_date || null,
+      book.rss_last_item_url || '',
       book.rss_has_update ? true : false,
       book.rss_last_checked || null,
       book.created_at || new Date().toISOString(),
@@ -143,6 +144,7 @@ async function syncDown(client) {
       rss_feed_url: row.rss_feed_url || '',
       rss_last_item_title: row.rss_last_item_title || '',
       rss_last_item_date: row.rss_last_item_date ? new Date(row.rss_last_item_date).toISOString() : null,
+      rss_last_item_url: row.rss_last_item_url || '',
       rss_has_update: row.rss_has_update ? 1 : 0,
       rss_last_checked: row.rss_last_checked ? new Date(row.rss_last_checked).toISOString() : null,
       created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
