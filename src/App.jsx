@@ -4,6 +4,7 @@ import StatsView from './components/StatsView'
 import SyncStatus from './components/SyncStatus'
 import SettingsModal from './components/SettingsModal'
 import ImportModal from './components/ImportModal'
+import ExportImportModal from './components/ExportImportModal'
 import { useBooks } from './hooks/useBooks'
 import { useSettings } from './hooks/useSettings'
 
@@ -45,6 +46,7 @@ export default function App() {
   const { settings, update } = useSettings()
   const [showSettings, setShowSettings] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showExportImport, setShowExportImport] = useState(false)
   const [updateReady, setUpdateReady] = useState(false)
   const [rssUpdates, setRssUpdates] = useState(0)
 
@@ -101,26 +103,26 @@ export default function App() {
       alert('No books with RSS feed URLs found. Add RSS feed URLs to your web books first.')
       return
     }
+    const nl = String.fromCharCode(10)
     const escXml = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
     const outlines = withFeeds.map(b => {
       const title = escXml(b.title)
       const feed = escXml(b.rss_feed_url)
       const site = escXml(b.source_url || b.rss_feed_url.split('/threadmarks')[0])
-      return `    <outline type="rss" text="${title}" title="${title}" xmlUrl="${feed}" htmlUrl="${site}"/>`
-    }).join('
-')
-    const opml = `<?xml version="1.0" encoding="UTF-8"?>
-<opml version="1.0">
-  <head>
-    <title>Library Tracker RSS Feeds</title>
-    <dateCreated>${new Date().toUTCString()}</dateCreated>
-  </head>
-  <body>
-    <outline text="Library Tracker" title="Library Tracker">
-${outlines}
-    </outline>
-  </body>
-</opml>`
+      return '    <outline type="rss" text="' + title + '" title="' + title + '" xmlUrl="' + feed + '" htmlUrl="' + site + '"/>'
+    }).join(nl)
+    const opml = '<?xml version="1.0" encoding="UTF-8"?>' + nl +
+      '<opml version="1.0">' + nl +
+      '  <head>' + nl +
+      '    <title>Library Tracker RSS Feeds</title>' + nl +
+      '    <dateCreated>' + new Date().toUTCString() + '</dateCreated>' + nl +
+      '  </head>' + nl +
+      '  <body>' + nl +
+      '    <outline text="Library Tracker" title="Library Tracker">' + nl +
+      outlines + nl +
+      '    </outline>' + nl +
+      '  </body>' + nl +
+      '</opml>'
     const blob = new Blob([opml], { type: 'text/xml' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -221,23 +223,8 @@ ${outlines}
                 : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>
               }
             </button>
-            {/* Export OPML */}
-            <button onClick={() => {
-              exportOPML(webBooks.books, `library-feeds-${new Date().toISOString().slice(0,10)}.opml`)
-            }} title="Export RSS feeds as OPML (for RSS reader apps)"
-              style={{ color: 'var(--text-muted)', padding: '4px' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7M6 17a1 1 0 110 2 1 1 0 010-2z" />
-              </svg>
-            </button>
-            {/* Export CSV */}
-            <button onClick={() => {
-              const tab = activeTab === 'stats' ? 'physical' : activeTab
-              const books = tab === 'physical' ? physicalBooks.books : webBooks.books
-              exportCSV(books, `library-${tab}-${new Date().toISOString().slice(0,10)}.csv`)
-            }} title="Export to CSV"
+            {/* Import/Export */}
+            <button onClick={() => setShowExportImport(true)} title="Import / Export"
               style={{ color: 'var(--text-muted)', padding: '4px' }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
@@ -245,7 +232,7 @@ ${outlines}
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
               </svg>
             </button>
-            <button onClick={() => setShowImport(true)} title="Bulk import CSV"
+            <button onClick={() => setShowImport(true)} title="Bulk import CSV" style={{ display: 'none' }}"
               style={{ color: 'var(--text-muted)', padding: '4px' }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
@@ -297,6 +284,25 @@ ${outlines}
       )}
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showExportImport && (
+        <ExportImportModal
+          onClose={() => setShowExportImport(false)}
+          onExportCSV={() => {
+            const tab = activeTab === 'stats' ? 'physical' : activeTab
+            const books = tab === 'physical' ? physicalBooks.books : webBooks.books
+            exportCSV(books, `library-${tab}-${new Date().toISOString().slice(0,10)}.csv`)
+            setShowExportImport(false)
+          }}
+          onExportOPML={() => {
+            exportOPML(webBooks.books, `library-feeds-${new Date().toISOString().slice(0,10)}.opml`)
+            setShowExportImport(false)
+          }}
+          onImport={() => {
+            setShowExportImport(false)
+            setShowImport(true)
+          }}
+        />
+      )}
       {showImport && <ImportModal onClose={() => setShowImport(false)} onImport={handleImport} />}
     </div>
   )

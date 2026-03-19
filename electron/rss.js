@@ -71,17 +71,18 @@ async function processBook(book) {
     const latestTitle = latestItem.title || ''
     const latestDate = latestItem.pubDate || latestItem.isoDate || null
     const latestDateISO = latestDate ? new Date(latestDate).toISOString() : null
+    const latestUrl = latestItem.link || latestItem.guid || ''
 
     console.log(`[RSS] "${book.title}" latest: "${latestTitle}" date: ${latestDateISO}`)
 
     if (!book.rss_last_item_title) {
-      markRssUpdate(book.id, latestTitle, false, latestDateISO)
+      markRssUpdate(book.id, latestTitle, false, latestDateISO, latestUrl)
     } else if (latestTitle !== book.rss_last_item_title) {
-      markRssUpdate(book.id, latestTitle, true, latestDateISO)
+      markRssUpdate(book.id, latestTitle, true, latestDateISO, latestUrl)
       emitRss({ type: 'update', bookId: book.id, bookTitle: book.title, latestTitle })
-      return true // signals an update was found
+      return true
     } else {
-      markRssUpdate(book.id, latestTitle, book.rss_has_update, latestDateISO)
+      markRssUpdate(book.id, latestTitle, book.rss_has_update, latestDateISO, latestUrl)
     }
   } catch (err) {
     console.warn(`RSS check failed for "${book.title}": ${err.message}`)
