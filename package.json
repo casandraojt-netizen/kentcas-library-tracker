@@ -13,7 +13,7 @@
     "generate-icon": "node scripts/generate-icon.js"
   },
   "build": {
-    "appId": "com.yourname.library-tracker",
+    "appId": "com.kentcas.librarytracker",
     "productName": "Library Tracker",
     "directories": {
       "output": "release"
@@ -33,7 +33,8 @@
           ]
         }
       ],
-      "icon": "public/icon.ico"
+      "icon": "public/icon.ico",
+      "publisherName": "Kentcas"
     },
     "mac": {
       "target": "dmg",
@@ -48,12 +49,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Library Tracker"
+      "shortcutName": "Library Tracker",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico"
     },
-    "publish": {
-      "provider": "github",
-      "releaseType": "release"
-    }
+    "copyright": "Copyright \u00a9 2025 Kentcas"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",
@@ -76,6 +76,6 @@
     "vite": "^5.1.4",
     "wait-on": "^7.2.0"
   },
-  "author": "Your Name",
+  "author": "Kentcas",
   "type": "commonjs"
 }

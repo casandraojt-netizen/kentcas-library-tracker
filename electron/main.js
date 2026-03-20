@@ -38,19 +38,23 @@ let isQuitting = false
 
 // ── Tray icon ──────────────────────────────────────────────────────────────────
 function getTrayIcon() {
-  // Use the main app icon — Electron handles resizing for the tray automatically
+  // On Windows use .ico which has multiple sizes built in — tray will pick the right one
+  if (process.platform === 'win32') {
+    const icoPath = path.join(__dirname, '..', 'public', 'icon.ico')
+    if (fs.existsSync(icoPath)) {
+      return nativeImage.createFromPath(icoPath)
+    }
+  }
+  // Fallback to PNG and resize for tray
   const iconPath = path.join(__dirname, '..', 'public', 'icon.png')
   if (fs.existsSync(iconPath)) {
-    return nativeImage.createFromPath(iconPath)
-  }
-  const trayIconPath = path.join(__dirname, '..', 'public', 'icon-tray.png')
-  if (fs.existsSync(trayIconPath)) {
-    return nativeImage.createFromPath(trayIconPath)
+    return nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   }
   return nativeImage.createEmpty()
 }
 
 function createTray() {
+  if (tray) { tray.destroy(); tray = null }
   tray = new Tray(getTrayIcon())
   tray.setToolTip('Library Tracker')
   updateTrayMenu()
@@ -158,7 +162,10 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (!mainWindow) createWindow() })
 })
 
-app.on('before-quit', () => { isQuitting = true })
+app.on('before-quit', () => {
+  isQuitting = true
+  if (tray) { tray.destroy(); tray = null }
+})
 app.on('window-all-closed', () => {
   if (syncInterval) clearInterval(syncInterval)
   if (rssInterval) {

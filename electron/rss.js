@@ -150,8 +150,8 @@ function startRssPoller() {
   // Startup check — all books, fires immediately
   checkAllFeedsStartup()
 
-  // Active books (reading/waiting) — every 15 minutes
-  const activeInterval = setInterval(checkActiveFeeds, 15 * 60 * 1000)
+  // Active books (reading/waiting) — every 5 minutes
+  const activeInterval = setInterval(checkActiveFeeds, 5 * 60 * 1000)
 
   // Inactive books (unread/hiatus/dropped) — every 6 hours
   const inactiveInterval = setInterval(checkInactiveFeeds, 6 * 60 * 60 * 1000)

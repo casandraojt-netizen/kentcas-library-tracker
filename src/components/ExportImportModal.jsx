@@ -17,7 +17,7 @@ export default function ExportImportModal({ onClose, onExportCSV, onExportOPML, 
           {['export', 'import'].map(t => (
             <button key={t} onClick={() => setTab(t)}
               className="flex-1 py-2.5 capitalize"
-              style={{ fontSize: '13px', color: tab === t ? 'var(--accent)' : 'var(--text-muted)', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', fontWeight: tab === t ? '600' : '400', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer' }}>
+              style={{ fontSize: '13px', color: tab === t ? 'var(--accent)' : 'var(--text-muted)', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', fontWeight: tab === t ? '600' : '400', background: 'none', border: 'none', cursor: 'pointer' }}>
               {t}
             </button>
           ))}
