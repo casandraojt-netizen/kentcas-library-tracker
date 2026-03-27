@@ -36,20 +36,39 @@ let syncInterval = null
 let rssInterval = null
 let isQuitting = false
 
+function resolveAssetPath(fileName) {
+  const packagedPath = path.join(process.resourcesPath, 'public', fileName)
+  if (app.isPackaged && fs.existsSync(packagedPath)) return packagedPath
+
+  const devPath = path.join(__dirname, '..', 'public', fileName)
+  if (fs.existsSync(devPath)) return devPath
+
+  return packagedPath
+}
+
+function loadImage(fileName, resize = null) {
+  const assetPath = resolveAssetPath(fileName)
+  if (!fs.existsSync(assetPath)) return nativeImage.createEmpty()
+
+  const image = nativeImage.createFromPath(assetPath)
+  if (image.isEmpty()) return nativeImage.createEmpty()
+  return resize ? image.resize(resize) : image
+}
+
 // ── Tray icon ──────────────────────────────────────────────────────────────────
 function getTrayIcon() {
   // On Windows use .ico which has multiple sizes built in — tray will pick the right one
   if (process.platform === 'win32') {
-    const icoPath = path.join(__dirname, '..', 'public', 'icon.ico')
-    if (fs.existsSync(icoPath)) {
-      return nativeImage.createFromPath(icoPath)
+    for (const fileName of ['icon-tray.png', 'icon-tray@2x.png', 'icon.ico', 'icon.png']) {
+      const image = loadImage(fileName, fileName.endsWith('.png') ? { width: 16, height: 16 } : null)
+      if (!image.isEmpty()) return image
     }
   }
-  // Fallback to PNG and resize for tray
-  const iconPath = path.join(__dirname, '..', 'public', 'icon.png')
-  if (fs.existsSync(iconPath)) {
-    return nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  for (const fileName of ['icon-tray.png', 'icon.png']) {
+    const image = loadImage(fileName, { width: 16, height: 16 })
+    if (!image.isEmpty()) return image
   }
+  console.warn('Tray icon asset not found, using empty image.')
   return nativeImage.createEmpty()
 }
 
@@ -77,7 +96,7 @@ function updateTrayMenu() {
 
 // ── Window ─────────────────────────────────────────────────────────────────────
 function createWindow() {
-  const appIconPath = path.join(__dirname, '..', 'public', 'icon.png')
+  const appIconPath = resolveAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png')
 
   mainWindow = new BrowserWindow({
     width: 1400,
