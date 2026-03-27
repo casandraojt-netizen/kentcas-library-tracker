@@ -7,9 +7,8 @@ function onRssEvent(cb) { rssListeners.push(cb) }
 function emitRss(event) { rssListeners.forEach(cb => cb(event)) }
 
 // Poll frequency tiers
-const ACTIVE_STATUSES    = ['reading', 'waiting']          // check every 15 min
-const INACTIVE_STATUSES  = ['unread', 'hiatus', 'dropped'] // check every 6 hours
-const SKIP_STATUSES      = ['finished', 'abandoned']       // startup only
+const ACTIVE_STATUSES = ['reading', 'waiting'] // check every 15 min
+const INACTIVE_STATUSES = ['unread', 'hiatus', 'dropped'] // check every 12 hours
 
 function fetchRaw(url, redirectCount = 0) {
   return new Promise((resolve, reject) => {
@@ -19,8 +18,6 @@ function fetchRaw(url, redirectCount = 0) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
       },
       timeout: 12000,
     }, (res) => {
@@ -38,8 +35,7 @@ function fetchRaw(url, redirectCount = 0) {
 }
 
 async function parseFeed(feedUrl) {
-  const url = feedUrl + (feedUrl.includes('?') ? '&' : '?') + '_t=' + Date.now()
-  const { status, body } = await fetchRaw(url)
+  const { status, body } = await fetchRaw(feedUrl)
   if (status !== 200 || !body) return null
 
   const Parser = require('rss-parser')
@@ -150,11 +146,11 @@ function startRssPoller() {
   // Startup check — all books, fires immediately
   checkAllFeedsStartup()
 
-  // Active books (reading/waiting) — every 5 minutes
-  const activeInterval = setInterval(checkActiveFeeds, 5 * 60 * 1000)
+  // Active books (reading/waiting) - every 15 minutes
+  const activeInterval = setInterval(checkActiveFeeds, 15 * 60 * 1000)
 
-  // Inactive books (unread/hiatus/dropped) — every 6 hours
-  const inactiveInterval = setInterval(checkInactiveFeeds, 6 * 60 * 60 * 1000)
+  // Inactive books (unread/hiatus/dropped) - every 12 hours
+  const inactiveInterval = setInterval(checkInactiveFeeds, 12 * 60 * 60 * 1000)
 
   // Return both intervals so main.js can clear them on quit
   return [activeInterval, inactiveInterval]
