@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 const DEFAULTS = {
   theme: 'dark',
   cardSize: 'normal', // compact | normal | large
+  customShelves: [],
 }
 
 export function useSettings() {

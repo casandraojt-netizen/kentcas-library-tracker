@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { getStatuses, getGenres, WEB_TYPES } from '../constants'
+import React, { useEffect, useMemo, useState } from 'react'
+import { getGenres, getShelfLabel, getStatuses, WEB_TYPES } from '../constants'
+import { getBookShelves } from '../library'
 import CoverSearch from './CoverSearch'
 import TagInput from './TagInput'
 
@@ -8,45 +9,99 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-export default function BookModal({ book, collection, onClose, onSave, onDelete, onOpenRss, existingBooks = [] }) {
+export default function BookModal({
+  book,
+  collection,
+  shelf,
+  shelves = [],
+  onClose,
+  onSave,
+  onDelete,
+  onOpenRss,
+  onAuthorClick,
+  existingBooks = [],
+}) {
   const isNew = !book?.id
   const [form, setForm] = useState(() => {
+    const initialShelves = shelf && shelf !== collection
+      ? [collection, shelf]
+      : [collection]
     const defaults = {
-      title: '', author: '', cover_url: '', genre: '', status: 'unread',
-      current_chapter: '', total_chapters: '', notes: '',
-      source_url: '', rss_feed_url: '', tags: '', is_favorite: false, is_r18: false, web_type: 'novel', collection,
+      title: '',
+      author: '',
+      cover_url: '',
+      genre: '',
+      status: 'unread',
+      current_chapter: '',
+      total_chapters: '',
+      notes: '',
+      source_url: '',
+      rss_feed_url: '',
+      tags: '',
+      is_favorite: false,
+      is_r18: false,
+      web_type: 'novel',
+      collection,
+      shelves: initialShelves,
     }
-    const overrides = book ? { ...book, year: book.year ?? '' } : { year: '' }
+    const overrides = book
+      ? { ...book, year: book.year ?? '', shelves: getBookShelves(book) }
+      : { year: '' }
     return { ...defaults, ...overrides }
   })
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showCoverSearch, setShowCoverSearch] = useState(false)
 
-  const statuses = getStatuses(collection)
+  const statuses = getStatuses(form.collection)
+  const genres = getGenres(form.collection)
+  const shelfOptions = useMemo(
+    () => shelves.filter(item => item.collection === form.collection && !item.isDefault),
+    [form.collection, shelves]
+  )
 
-  // Duplicate detection
   const duplicate = isNew && form.title.trim()
-    ? existingBooks.find(b => b.title.trim().toLowerCase() === form.title.trim().toLowerCase() && b.id !== book?.id)
+    ? existingBooks.find(item => item.title.trim().toLowerCase() === form.title.trim().toLowerCase() && item.id !== book?.id)
     : null
-  const genres = getGenres(collection)
   const originalStatus = book?.status
   const statusWillChange = !isNew && form.status !== originalStatus
-  const currentStatusInfo = statuses.find(s => s.value === form.status)
-  const originalStatusInfo = statuses.find(s => s.value === originalStatus)
+  const currentStatusInfo = statuses.find(item => item.value === form.status)
+  const originalStatusInfo = statuses.find(item => item.value === originalStatus)
 
-  const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const set = (key, value) => setForm(current => ({ ...current, [key]: value }))
+  const toggleShelf = (shelfId) => {
+    setForm(current => {
+      const exists = current.shelves.includes(shelfId)
+      const nextShelves = exists
+        ? current.shelves.filter(item => item !== shelfId)
+        : [...current.shelves, shelfId]
+      const normalizedShelves = [current.collection, ...nextShelves.filter(item => item && item !== current.collection)]
+      return { ...current, shelves: normalizedShelves }
+    })
+  }
 
   const handleSave = async () => {
     if (!form.title.trim()) return
     setSaving(true)
-    try { await onSave({ ...form, year: form.year ? parseInt(form.year) : null }); onClose() }
-    finally { setSaving(false) }
+    try {
+      await onSave({
+        ...form,
+        shelves: [form.collection, ...form.shelves.filter(item => item && item !== form.collection)],
+        year: form.year ? parseInt(form.year, 10) : null,
+      })
+      onClose()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete) { setConfirmDelete(true); return }
-    await onDelete(book.id); onClose()
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
+    await onDelete(book.id)
+    onClose()
   }
 
   const handleCoverSelect = (coverUrl, title, author, year) => {
@@ -57,18 +112,27 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
   }
 
   useEffect(() => {
-    const h = (e) => { if (e.key === 'Escape' && !showCoverSearch) onClose() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    const handler = (event) => {
+      if (event.key === 'Escape' && !showCoverSearch) onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [onClose, showCoverSearch])
 
   const inputStyle = {
-    background: 'var(--bg-overlay)', border: '1px solid var(--border)', color: 'var(--text-primary)',
-    borderRadius: '6px', padding: '8px 12px', fontSize: '14px', width: '100%',
-    outline: 'none', fontFamily: 'DM Sans, sans-serif', transition: 'border-color 0.15s',
+    background: 'var(--bg-overlay)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    fontSize: '14px',
+    width: '100%',
+    outline: 'none',
+    fontFamily: 'DM Sans, sans-serif',
+    transition: 'border-color 0.15s',
   }
-  const fi = e => e.target.style.borderColor = 'var(--accent)'
-  const fo = e => e.target.style.borderColor = 'var(--border)'
+  const focusInput = (event) => { event.target.style.borderColor = 'var(--accent)' }
+  const blurInput = (event) => { event.target.style.borderColor = 'var(--border)' }
   const Label = ({ children }) => (
     <label style={{ fontSize: '11px', fontFamily: 'DM Sans, sans-serif', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '6px', display: 'block' }}>
       {children}
@@ -81,30 +145,28 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
         style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
         <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl fade-in"
           style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
-          onClick={e => e.stopPropagation()}>
+          onClick={event => event.stopPropagation()}>
 
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 sticky top-0 z-10"
             style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
             <h2 className="font-display text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {isNew ? `Add to ${collection === 'physical' ? 'Physical' : 'Web'} Collection` : 'Edit Book'}
+              {isNew ? 'Add Book' : 'Edit Book'}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--text-muted)', padding: '6px' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
+              onMouseEnter={event => event.currentTarget.style.color = 'var(--text-primary)'}
+              onMouseLeave={event => event.currentTarget.style.color = 'var(--text-muted)'}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
 
           <div className="p-6 space-y-5">
-            {/* Cover + Title */}
             <div className="flex gap-4">
               <div className="flex-shrink-0">
                 <div className="w-24 h-36 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer group relative"
                   style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)' }}
                   onClick={() => setShowCoverSearch(true)}>
                   {form.cover_url ? (
-                    <img src={form.cover_url} alt="cover" className="w-full h-full object-cover" onError={e => e.target.style.display = 'none'} />
+                    <img src={form.cover_url} alt="cover" className="w-full h-full object-cover" onError={event => event.target.style.display = 'none'} />
                   ) : (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-8 h-8" style={{ color: 'var(--text-muted)' }}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
@@ -112,7 +174,7 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
                   )}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ background: 'rgba(0,0,0,0.6)', fontSize: '10px', color: '#fff', fontFamily: 'DM Sans, sans-serif', textAlign: 'center', padding: '4px' }}>
-                    🔍 Search
+                    Search
                   </div>
                 </div>
                 <button onClick={() => setShowCoverSearch(true)} className="w-full mt-1.5 text-center text-xs"
@@ -123,7 +185,7 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
               <div className="flex-1 space-y-3">
                 <div>
                   <Label>Title *</Label>
-                  <input style={inputStyle} value={form.title} onChange={e => set('title', e.target.value)} placeholder="Book title" onFocus={fi} onBlur={fo} />
+                  <input style={inputStyle} value={form.title} onChange={event => set('title', event.target.value)} placeholder="Book title" onFocus={focusInput} onBlur={blurInput} />
                   {duplicate && (
                     <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg"
                       style={{ background: 'rgba(201,135,58,0.08)', border: '1px solid rgba(201,135,58,0.3)' }}>
@@ -131,48 +193,90 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                       </svg>
                       <p style={{ fontSize: '11px', fontFamily: 'DM Sans, sans-serif', color: 'var(--accent)' }}>
-                        Possible duplicate — "<strong>{duplicate.title}</strong>" already exists in your {duplicate.collection} collection
+                        Possible duplicate: "<strong>{duplicate.title}</strong>" already exists in {getBookShelves(duplicate).map(getShelfLabel).join(', ')}
                       </p>
                     </div>
                   )}
                 </div>
                 <div>
                   <Label>Cover Image URL</Label>
-                  <input style={inputStyle} value={form.cover_url} onChange={e => set('cover_url', e.target.value)} placeholder="https://... or use search above" onFocus={fi} onBlur={fo} />
+                  <input style={inputStyle} value={form.cover_url} onChange={event => set('cover_url', event.target.value)} placeholder="https://... or use search above" onFocus={focusInput} onBlur={blurInput} />
                 </div>
               </div>
             </div>
 
-            {/* Author + Year */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Author</Label>
-                <input style={inputStyle} value={form.author} onChange={e => set('author', e.target.value)} placeholder="Author name" onFocus={fi} onBlur={fo} />
+                <input style={inputStyle} value={form.author} onChange={event => set('author', event.target.value)} placeholder="Author name" onFocus={focusInput} onBlur={blurInput} />
+                {!isNew && form.author.trim() && onAuthorClick && (
+                  <button
+                    type="button"
+                    onClick={() => onAuthorClick(form.author)}
+                    style={{ marginTop: '6px', padding: 0, border: 'none', background: 'transparent', color: 'var(--accent)', fontFamily: 'DM Sans, sans-serif', fontSize: '11px', cursor: 'pointer' }}
+                  >
+                    View author page
+                  </button>
+                )}
               </div>
               <div>
                 <Label>Year Published</Label>
-                <input style={inputStyle} type="number" value={form.year} onChange={e => set('year', e.target.value)} placeholder="e.g. 2020" onFocus={fi} onBlur={fo} />
+                <input style={inputStyle} type="number" value={form.year} onChange={event => set('year', event.target.value)} placeholder="e.g. 2020" onFocus={focusInput} onBlur={blurInput} />
               </div>
             </div>
 
-            {/* Genre + Status */}
+            <div>
+              <Label>Shelves</Label>
+              {shelfOptions.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {shelfOptions.map(option => {
+                    const active = form.shelves.includes(option.id)
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => toggleShelf(option.id)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '999px',
+                          border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                          background: active ? 'rgba(201,135,58,0.14)' : 'var(--bg-overlay)',
+                          color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                          fontFamily: 'DM Sans, sans-serif',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {option.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif', fontSize: '12px' }}>
+                  No custom shelves yet for this collection.
+                </div>
+              )}
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif', marginTop: '6px' }}>
+                Every book stays in the {collection === 'physical' ? 'Physical Books' : 'Web Books'} collection automatically. Toggle any extra shelves you want on top of that.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Genre</Label>
-                <select style={inputStyle} value={form.genre} onChange={e => set('genre', e.target.value)}>
+                <select style={inputStyle} value={form.genre} onChange={event => set('genre', event.target.value)}>
                   <option value="">Select genre</option>
-                  {genres.map(g => <option key={g} value={g}>{g}</option>)}
+                  {genres.map(genre => <option key={genre} value={genre}>{genre}</option>)}
                 </select>
               </div>
               <div>
                 <Label>Status</Label>
-                <select style={inputStyle} value={form.status} onChange={e => set('status', e.target.value)}>
-                  {statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                <select style={inputStyle} value={form.status} onChange={event => set('status', event.target.value)}>
+                  {statuses.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}
                 </select>
               </div>
             </div>
 
-            {/* Status date callout */}
             {!isNew && (
               <div className="rounded-lg px-4 py-3 flex items-start gap-3"
                 style={{ background: 'rgba(201,135,58,0.06)', border: '1px solid var(--border)' }}>
@@ -189,7 +293,7 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
                         <span style={{ color: currentStatusInfo?.color || 'var(--accent-light)', fontWeight: '500' }}>{currentStatusInfo?.label || form.status}</span>
                       </p>
                       <p style={{ fontSize: '11px', fontFamily: 'DM Sans, sans-serif', color: 'var(--accent)', marginTop: '3px' }}>
-                        📅 Status date will be stamped as today on save
+                        Status date will be stamped as today on save
                       </p>
                     </>
                   ) : form.status_changed_at ? (
@@ -205,66 +309,59 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
               </div>
             )}
 
-            {/* Web type */}
-            {collection === 'web' && (
+            {form.collection === 'web' && (
               <div>
                 <Label>Type</Label>
                 <div className="flex gap-3">
-                  {WEB_TYPES.map(t => (
-                    <button key={t.value} onClick={() => set('web_type', t.value)}
-                      style={{ padding: '7px 16px', borderRadius: '6px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', background: form.web_type === t.value ? 'var(--accent)' : 'var(--bg-overlay)', color: form.web_type === t.value ? '#0a0908' : 'var(--text-secondary)', border: '1px solid ' + (form.web_type === t.value ? 'var(--accent)' : 'var(--border)') }}>
-                      {t.label}
+                  {WEB_TYPES.map(type => (
+                    <button key={type.value} type="button" onClick={() => set('web_type', type.value)}
+                      style={{ padding: '7px 16px', borderRadius: '6px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', background: form.web_type === type.value ? 'var(--accent)' : 'var(--bg-overlay)', color: form.web_type === type.value ? '#0a0908' : 'var(--text-secondary)', border: '1px solid ' + (form.web_type === type.value ? 'var(--accent)' : 'var(--border)') }}>
+                      {type.label}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Chapters */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{collection === 'web' ? 'Latest Chapter Read' : 'Current Chapter / Volume'}</Label>
-                <input style={inputStyle} value={form.current_chapter} onChange={e => set('current_chapter', e.target.value)} placeholder="e.g. 42 or Vol. 3" onFocus={fi} onBlur={fo} />
+                <Label>{form.collection === 'web' ? 'Latest Chapter Read' : 'Current Chapter / Volume'}</Label>
+                <input style={inputStyle} value={form.current_chapter} onChange={event => set('current_chapter', event.target.value)} placeholder="e.g. 42 or Vol. 3" onFocus={focusInput} onBlur={blurInput} />
               </div>
               <div>
                 <Label>Total Chapters / Volumes</Label>
-                <input style={inputStyle} value={form.total_chapters} onChange={e => set('total_chapters', e.target.value)} placeholder="Total or 'Ongoing'" onFocus={fi} onBlur={fo} />
+                <input style={inputStyle} value={form.total_chapters} onChange={event => set('total_chapters', event.target.value)} placeholder="Total or 'Ongoing'" onFocus={focusInput} onBlur={blurInput} />
               </div>
             </div>
 
-            {/* Source URL */}
-            {collection === 'web' && (
+            {form.collection === 'web' && (
               <div>
                 <Label>Source URL</Label>
-                <input style={inputStyle} value={form.source_url} onChange={e => set('source_url', e.target.value)} placeholder="Link to novel/comic page" onFocus={fi} onBlur={fo} />
+                <input style={inputStyle} value={form.source_url} onChange={event => set('source_url', event.target.value)} placeholder="Link to novel/comic page" onFocus={focusInput} onBlur={blurInput} />
               </div>
             )}
 
-            {/* RSS Feed URL */}
-            {collection === 'web' && (
+            {form.collection === 'web' && (
               <div>
                 <Label>RSS Feed URL (for update notifications)</Label>
-                <input style={inputStyle} value={form.rss_feed_url} onChange={e => set('rss_feed_url', e.target.value)} placeholder="https://example.com/feed.rss" onFocus={fi} onBlur={fo} />
+                <input style={inputStyle} value={form.rss_feed_url} onChange={event => set('rss_feed_url', event.target.value)} placeholder="https://example.com/feed.rss" onFocus={focusInput} onBlur={blurInput} />
                 <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif', marginTop: '4px' }}>
                   The app will check this feed every 30 minutes and notify you of new chapters
                 </p>
               </div>
             )}
 
-            {/* Notes */}
             <div>
               <Label>Notes</Label>
-              <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Personal notes..." onFocus={fi} onBlur={fo} />
+              <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }} value={form.notes} onChange={event => set('notes', event.target.value)} placeholder="Personal notes..." onFocus={focusInput} onBlur={blurInput} />
             </div>
 
-            {/* Tags */}
             <div>
               <Label>Tags</Label>
-              <TagInput tags={form.tags || ''} onChange={val => set('tags', val)} />
+              <TagInput tags={form.tags || ''} onChange={value => set('tags', value)} />
             </div>
 
-            {/* Favorite */}
-            <button onClick={() => set('is_favorite', !form.is_favorite)} className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+            <button type="button" onClick={() => set('is_favorite', !form.is_favorite)} className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
               style={{ background: form.is_favorite ? 'rgba(240,192,64,0.12)' : 'var(--bg-overlay)', border: '1px solid ' + (form.is_favorite ? 'rgba(240,192,64,0.4)' : 'var(--border)'), color: form.is_favorite ? '#f0c040' : 'var(--text-secondary)', fontFamily: 'DM Sans, sans-serif', fontSize: '13px' }}>
               <svg viewBox="0 0 24 24" fill={form.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -272,14 +369,13 @@ export default function BookModal({ book, collection, onClose, onSave, onDelete,
               {form.is_favorite ? 'Favorited' : 'Add to Favorites'}
             </button>
 
-            <button onClick={() => set('is_r18', !form.is_r18)} className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+            <button type="button" onClick={() => set('is_r18', !form.is_r18)} className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
               style={{ background: form.is_r18 ? 'rgba(154,64,64,0.12)' : 'var(--bg-overlay)', border: '1px solid ' + (form.is_r18 ? 'rgba(154,64,64,0.4)' : 'var(--border)'), color: form.is_r18 ? '#ffaaaa' : 'var(--text-secondary)', fontFamily: 'DM Sans, sans-serif', fontSize: '13px' }}>
               <span style={{ fontSize: '11px', fontWeight: '700', fontFamily: 'DM Sans, sans-serif' }}>R18</span>
               {form.is_r18 ? 'Marked as R18 (blurred by default)' : 'Mark as R18 content'}
             </button>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-between px-6 py-4 sticky bottom-0"
             style={{ background: 'var(--bg-surface)', borderTop: '1px solid var(--border)' }}>
             <div>

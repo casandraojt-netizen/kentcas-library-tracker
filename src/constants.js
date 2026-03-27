@@ -33,7 +33,17 @@ export const WEB_TYPES = [
   { value: 'comic', label: 'Web Comic / Manga / Manhwa / Manhua' },
 ]
 
+export const DEFAULT_SHELVES = [
+  { id: 'physical', name: 'Physical Books', collection: 'physical', isDefault: true, description: 'Your bookshelf' },
+  { id: 'web', name: 'Web Books', collection: 'web', isDefault: true, description: 'Novels, manhwa & manga' },
+]
+
 export const getStatuses = (collection) => collection === 'physical' ? PHYSICAL_STATUSES : WEB_STATUSES
 export const getGenres = (collection) => collection === 'physical' ? PHYSICAL_GENRES : WEB_GENRES
 export const getStatusInfo = (status) =>
   [...PHYSICAL_STATUSES, ...WEB_STATUSES].find(s => s.value === status) || { label: status, color: 'var(--text-muted)' }
+
+export const getCollectionLabel = (collection) => collection === 'physical' ? 'Physical' : 'Web'
+export const getShelfLabel = (shelf) => DEFAULT_SHELVES.find(item => item.id === shelf)?.name || shelf
+export const getShelfDescription = (shelf) => DEFAULT_SHELVES.find(item => item.id === shelf)?.description || 'Custom list'
+export const normalizeAuthorName = (author) => author.trim().toLowerCase().replace(/\s+/g, ' ')

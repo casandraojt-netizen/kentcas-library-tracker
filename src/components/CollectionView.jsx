@@ -1,52 +1,45 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import BookCard from './BookCard'
 import BookModal from './BookModal'
 import FilterPanel from './FilterPanel'
-import RssReader from './RssReader'
 import ForumSearch from './ForumSearch'
+import RssReader from './RssReader'
 
 function applyFilters(books, filters) {
   let result = [...books]
-  // Hide R18 by default unless showR18 is on
-  if (!filters.showR18) result = result.filter(b => !b.is_r18)
+  if (!filters.showR18) result = result.filter(book => !book.is_r18)
   if (filters.search) {
-    const q = filters.search.toLowerCase()
-    result = result.filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q))
+    const query = filters.search.toLowerCase()
+    result = result.filter(book => book.title.toLowerCase().includes(query) || book.author.toLowerCase().includes(query))
   }
-  if (filters.favoritesOnly) result = result.filter(b => b.is_favorite)
-  if (filters.rssUpdatesOnly) result = result.filter(b => b.rss_has_update)
-  if (filters.r18Only) result = result.filter(b => b.is_r18)
-  if (filters.statuses?.length) result = result.filter(b => filters.statuses.includes(b.status))
-  if (filters.genres?.length) result = result.filter(b => filters.genres.includes(b.genre))
-  // Tag search: filter books where any tag matches the search text
+  if (filters.favoritesOnly) result = result.filter(book => book.is_favorite)
+  if (filters.rssUpdatesOnly) result = result.filter(book => book.rss_has_update)
+  if (filters.r18Only) result = result.filter(book => book.is_r18)
+  if (filters.statuses?.length) result = result.filter(book => filters.statuses.includes(book.status))
+  if (filters.genres?.length) result = result.filter(book => filters.genres.includes(book.genre))
   if (filters.tagSearch?.trim()) {
-    const q = filters.tagSearch.toLowerCase()
-    result = result.filter(b => b.tags && b.tags.toLowerCase().includes(q))
+    const query = filters.tagSearch.toLowerCase()
+    result = result.filter(book => book.tags && book.tags.toLowerCase().includes(query))
   }
-  // Tag chips: filter books that have ALL selected tags
   if (filters.tags?.length) {
-    result = result.filter(b => {
-      const bookTags = b.tags ? b.tags.split(',').map(t => t.trim().toLowerCase()) : []
-      return filters.tags.every(t => bookTags.includes(t.toLowerCase()))
+    result = result.filter(book => {
+      const bookTags = book.tags ? book.tags.split(',').map(tag => tag.trim().toLowerCase()) : []
+      return filters.tags.every(tag => bookTags.includes(tag.toLowerCase()))
     })
   }
-  if (filters.yearFrom) result = result.filter(b => b.year >= parseInt(filters.yearFrom))
-  if (filters.yearTo) result = result.filter(b => b.year <= parseInt(filters.yearTo))
+  if (filters.yearFrom) result = result.filter(book => book.year >= parseInt(filters.yearFrom, 10))
+  if (filters.yearTo) result = result.filter(book => book.year <= parseInt(filters.yearTo, 10))
 
-  const sortBy = filters.sortBy || 'rss_last_item_date'
+  const sortBy = filters.sortBy || 'updated_at'
   result.sort((a, b) => {
-    // NEW badge always pins to top regardless of sort
     if (a.rss_has_update !== b.rss_has_update) return a.rss_has_update ? -1 : 1
-    // Within same NEW/non-NEW group, sort by selected criterion
     if (sortBy === 'title') return a.title.localeCompare(b.title)
     if (sortBy === 'year') return (b.year || 0) - (a.year || 0)
     if (sortBy === 'status') return a.status.localeCompare(b.status)
     if (sortBy === 'status_changed_at') return new Date(b.status_changed_at || 0) - new Date(a.status_changed_at || 0)
     if (sortBy === 'rss_last_item_date') {
-      // Fall back to rss_last_checked if rss_last_item_date not yet populated
       const rawA = a.rss_last_item_date || a.rss_last_checked
       const rawB = b.rss_last_item_date || b.rss_last_checked
-      // Books with no RSS feed at all sink to bottom
       if (!a.rss_feed_url && !b.rss_feed_url) return 0
       if (!a.rss_feed_url) return 1
       if (!b.rss_feed_url) return -1
@@ -64,53 +57,80 @@ function applyFilters(books, filters) {
   return result
 }
 
-export default function CollectionView({ collection, books, loading, addBook, updateBook, deleteBook, cardSize = 'normal', allBooks = [] }) {
+export default function CollectionView({
+  shelf,
+  books,
+  loading,
+  addBook,
+  updateBook,
+  deleteBook,
+  cardSize = 'normal',
+  allBooks = [],
+  shelves = [],
+  onAuthorClick,
+}) {
   const [modal, setModal] = useState(null)
-  const [filters, setFilters] = useState({ sortBy: 'rss_last_item_date' })
+  const [filters, setFilters] = useState({ sortBy: shelf.collection === 'web' ? 'rss_last_item_date' : 'updated_at' })
   const [filterOpen, setFilterOpen] = useState(false)
   const [rssBook, setRssBook] = useState(null)
   const [showForumSearch, setShowForumSearch] = useState(false)
 
   const filtered = useMemo(() => applyFilters(books, filters), [books, filters])
   const activeFilterCount = [
-    filters.search, filters.favoritesOnly, filters.rssUpdatesOnly, filters.r18Only, filters.showR18,
-    ...(filters.statuses || []), ...(filters.genres || []),
-    filters.yearFrom, filters.yearTo,
+    filters.search,
+    filters.favoritesOnly,
+    filters.rssUpdatesOnly,
+    filters.r18Only,
+    filters.showR18,
+    ...(filters.statuses || []),
+    ...(filters.genres || []),
+    ...(filters.tags || []),
+    filters.tagSearch,
+    filters.yearFrom,
+    filters.yearTo,
   ].filter(Boolean).length
-
-  const hiddenR18Count = useMemo(() => books.filter(b => b.is_r18 && !filters.showR18).length, [books, filters.showR18])
+  const hiddenR18Count = useMemo(() => books.filter(book => book.is_r18 && !filters.showR18).length, [books, filters.showR18])
 
   useEffect(() => {
-    const handleKey = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
-      if (e.key === 'n' || e.key === 'N') setModal({ isNew: true })
-      if (e.key === 'f' || e.key === 'F') setFilters(f => ({ ...f, favoritesOnly: !f.favoritesOnly }))
-      if (e.key === '/') { setFilterOpen(true); setTimeout(() => document.querySelector('input[placeholder="Title, author..."]')?.focus(), 100) }
-      if ((e.key === 's' || e.key === 'S') && collection === 'web') setShowForumSearch(true)
+    setFilters(current => ({
+      ...current,
+      sortBy: current.sortBy || (shelf.collection === 'web' ? 'rss_last_item_date' : 'updated_at'),
+    }))
+  }, [shelf.collection])
+
+  useEffect(() => {
+    const handleKey = (event) => {
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return
+      if (event.key === 'n' || event.key === 'N') setModal({ isNew: true })
+      if (event.key === 'f' || event.key === 'F') setFilters(current => ({ ...current, favoritesOnly: !current.favoritesOnly }))
+      if (event.key === '/') {
+        setFilterOpen(true)
+        setTimeout(() => document.querySelector('input[placeholder="Title, author..."]')?.focus(), 100)
+      }
+      if ((event.key === 's' || event.key === 'S') && shelf.collection === 'web') setShowForumSearch(true)
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [collection])
+  }, [shelf.collection])
 
   const handleSave = async (bookData) => {
-    if (bookData.id && books.find(b => b.id === bookData.id)) {
+    if (bookData.id && allBooks.find(book => book.id === bookData.id)) {
       await updateBook(bookData.id, bookData)
     } else {
-      await addBook({ ...bookData, collection })
+      await addBook({
+        ...bookData,
+        collection: shelf.collection,
+        shelves: bookData.shelves || (shelf.id === shelf.collection ? [shelf.collection] : [shelf.collection, shelf.id]),
+      })
     }
   }
 
-  const handleCardClick = (book) => {
-    // Always open edit modal on card click
-    setModal({ book })
-  }
-
-  const handleRssClick = (book) => {
-    setRssBook(book)
-  }
-
   const handleForumAdd = async (item) => {
-    await addBook({ ...item, collection })
+    await addBook({
+      ...item,
+      collection: shelf.collection,
+      shelves: shelf.id === shelf.collection ? [shelf.collection] : [shelf.collection, shelf.id],
+    })
   }
 
   const handleIncrementChapter = async (id, newChapter) => {
@@ -122,25 +142,20 @@ export default function CollectionView({ collection, books, loading, addBook, up
     await updateBook(id, { rss_has_update: false })
   }
 
-  const rssUpdateCount = books.filter(b => b.rss_has_update).length
-  const label = collection === 'physical' ? 'Physical Books' : 'Web Collection'
-  const subtitle = collection === 'physical' ? 'Your bookshelf' : 'Novels, manhwa & manga'
+  const rssUpdateCount = books.filter(book => book.rss_has_update).length
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Filter Sidebar */}
       <div className="flex-shrink-0 overflow-y-auto transition-all duration-200"
         style={{ width: filterOpen ? '220px' : '0px', opacity: filterOpen ? 1 : 0, padding: filterOpen ? '20px 16px' : '0', borderRight: filterOpen ? '1px solid var(--border)' : 'none', background: 'var(--bg-surface)', overflow: filterOpen ? 'auto' : 'hidden' }}>
-        {filterOpen && <FilterPanel collection={collection} filters={filters} onChange={setFilters} />}
+        {filterOpen && <FilterPanel collection={shelf.collection} filters={filters} onChange={setFilters} />}
       </div>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Toolbar */}
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-display text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</h1>
+              <h1 className="font-display text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{shelf.name}</h1>
               {rssUpdateCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full"
                   style={{ background: 'rgba(90,154,110,0.15)', color: '#5a9a6e', border: '1px solid rgba(90,154,110,0.3)', fontFamily: 'DM Sans, sans-serif', fontSize: '11px' }}>
@@ -148,22 +163,22 @@ export default function CollectionView({ collection, books, loading, addBook, up
                 </span>
               )}
               {hiddenR18Count > 0 && (
-                <button onClick={() => setFilters(f => ({ ...f, showR18: !f.showR18 }))}
+                <button onClick={() => setFilters(current => ({ ...current, showR18: !current.showR18 }))}
                   style={{ background: 'rgba(154,64,64,0.1)', color: '#ffaaaa', border: '1px solid rgba(154,64,64,0.3)', fontFamily: 'DM Sans, sans-serif', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', cursor: 'pointer' }}>
-                  {filters.showR18 ? `hide R18` : `+${hiddenR18Count} R18`}
+                  {filters.showR18 ? 'hide R18' : `+${hiddenR18Count} R18`}
                 </button>
               )}
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif' }}>
-              {subtitle} · {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+              {shelf.description} · {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
               {activeFilterCount > 0 && ` (filtered from ${books.length})`}
               <span style={{ marginLeft: '8px', opacity: 0.5 }}>
-                · N=add{collection === 'web' ? ' · S=forum search' : ''} · /=search · F=favorites
+                · N=add{shelf.collection === 'web' ? ' · S=forum search' : ''} · /=search · F=favorites
               </span>
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {collection === 'web' && (
+            {shelf.collection === 'web' && (
               <button onClick={() => setShowForumSearch(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
                 style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontFamily: 'DM Sans, sans-serif', fontSize: '12px' }}>
@@ -173,7 +188,7 @@ export default function CollectionView({ collection, books, loading, addBook, up
                 Forum Search
               </button>
             )}
-            <button onClick={() => setFilterOpen(o => !o)}
+            <button onClick={() => setFilterOpen(open => !open)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
               style={{ background: filterOpen || activeFilterCount > 0 ? 'rgba(201,135,58,0.12)' : 'var(--bg-overlay)', border: '1px solid ' + (filterOpen || activeFilterCount > 0 ? 'var(--border-strong)' : 'var(--border)'), color: filterOpen || activeFilterCount > 0 ? 'var(--accent)' : 'var(--text-secondary)', fontFamily: 'DM Sans, sans-serif', fontSize: '12px' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
@@ -192,12 +207,11 @@ export default function CollectionView({ collection, books, loading, addBook, up
           </div>
         </div>
 
-        {/* Grid */}
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className={`card-grid-${cardSize}`}>
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="rounded-lg" style={{ aspectRatio: '2/3', background: 'var(--bg-card)', border: '1px solid var(--border)', opacity: 0.5 }} />
+              {Array.from({ length: 12 }).map((_, index) => (
+                <div key={index} className="rounded-lg" style={{ aspectRatio: '2/3', background: 'var(--bg-card)', border: '1px solid var(--border)', opacity: 0.5 }} />
               ))}
             </div>
           ) : filtered.length === 0 ? (
@@ -206,22 +220,26 @@ export default function CollectionView({ collection, books, loading, addBook, up
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
               </svg>
               <p className="font-display text-lg" style={{ color: 'var(--text-muted)' }}>
-                {activeFilterCount > 0 ? 'No books match your filters' : 'Your collection is empty'}
+                {activeFilterCount > 0 ? 'No books match your filters' : 'This shelf is empty'}
               </p>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif' }}>
-                {activeFilterCount > 0 ? 'Try adjusting your filters' : `Click "Add Book" or press N${collection === 'web' ? ', or press S to search forums' : ''}`}
+                {activeFilterCount > 0 ? 'Try adjusting your filters' : `Click "Add Book" or press N${shelf.collection === 'web' ? ', or press S to search forums' : ''}`}
               </p>
             </div>
           ) : (
             <div className={`card-grid-${cardSize}`}>
               {filtered.map(book => (
-                <BookCard key={book.id} book={book}
+                <BookCard
+                  key={book.id}
+                  book={book}
                   showR18={filters.showR18}
-                  onClick={handleCardClick}
-                  onEdit={(b) => setModal({ book: b })}
-                  onToggleFavorite={(id, val) => updateBook(id, { is_favorite: val })}
+                  onClick={(selected) => setModal({ book: selected })}
+                  onEdit={(selected) => setModal({ book: selected })}
+                  onToggleFavorite={(id, value) => updateBook(id, { is_favorite: value })}
                   onIncrementChapter={handleIncrementChapter}
                   onClearRssUpdate={handleClearRssUpdate}
+                  onAuthorClick={onAuthorClick}
+                  onOpenRss={(book) => setRssBook(book)}
                 />
               ))}
             </div>
@@ -232,11 +250,14 @@ export default function CollectionView({ collection, books, loading, addBook, up
       {modal && (
         <BookModal
           book={modal.isNew ? null : modal.book}
-          collection={collection}
+          collection={modal.isNew ? shelf.collection : modal.book.collection}
+          shelf={modal.isNew ? shelf.id : (modal.book.shelves?.[0] || modal.book.shelf)}
+          shelves={shelves}
           onClose={() => setModal(null)}
           onSave={handleSave}
           onDelete={deleteBook}
           onOpenRss={(book) => { setModal(null); setRssBook(book) }}
+          onAuthorClick={(author) => { setModal(null); onAuthorClick?.(author) }}
           existingBooks={allBooks}
         />
       )}

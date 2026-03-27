@@ -181,12 +181,25 @@ ipcMain.handle('db:getBooks', async (_, collection) => {
   } catch (e) { return { success: false, error: e.message } }
 })
 
+ipcMain.handle('db:getReadingHistory', async (_, page = 1, pageSize = 20, filters = {}) => {
+  try { return { success: true, data: localDb.getReadingHistory(page, pageSize, filters) }
+  } catch (e) { return { success: false, error: e.message } }
+})
+
 ipcMain.handle('db:addBook', async (_, book) => {
   try {
     const { v4: uuidv4 } = require('uuid')
     const now = new Date().toISOString()
-    const newBook = { ...book, id: book.id || uuidv4(), created_at: now, updated_at: now, synced: false }
+    const newBook = {
+      ...book,
+      shelves: book.shelves || book.shelf || book.collection || 'physical',
+      id: book.id || uuidv4(),
+      created_at: now,
+      updated_at: now,
+      synced: false,
+    }
     const saved = localDb.upsertBook(newBook)
+    localDb.recordCreateHistory(saved, saved.created_at || now)
     sync.runSync()
     return { success: true, data: saved }
   } catch (e) { return { success: false, error: e.message } }
@@ -194,8 +207,11 @@ ipcMain.handle('db:addBook', async (_, book) => {
 
 ipcMain.handle('db:updateBook', async (_, id, updates) => {
   try {
+    const existing = localDb.getBook(id)
+    if (!existing) throw new Error('Book not found: ' + id)
     console.log('[updateBook] id:', id, 'is_r18 in updates:', updates.is_r18, 'type:', typeof updates.is_r18)
     const saved = localDb.updateBook(id, updates)
+    localDb.recordBookChanges(existing, saved)
     console.log('[updateBook] saved is_r18:', saved.is_r18)
     sync.runSync()
     return { success: true, data: saved }
@@ -213,7 +229,15 @@ ipcMain.handle('db:importBooks', async (_, books) => {
     const now = new Date().toISOString()
     let count = 0
     for (const book of books) {
-      localDb.upsertBook({ ...book, id: book.id || uuidv4(), created_at: now, updated_at: now, synced: false })
+      const saved = localDb.upsertBook({
+        ...book,
+        shelves: book.shelves || book.shelf || book.collection || 'physical',
+        id: book.id || uuidv4(),
+        created_at: now,
+        updated_at: now,
+        synced: false,
+      })
+      localDb.recordCreateHistory(saved, saved.created_at || now)
       count++
     }
     sync.runSync()

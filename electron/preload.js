@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('api', {
   // Books
   getBooks: (collection) => ipcRenderer.invoke('db:getBooks', collection),
+  getReadingHistory: (page, pageSize, filters) => ipcRenderer.invoke('db:getReadingHistory', page, pageSize, filters),
   addBook: (book) => ipcRenderer.invoke('db:addBook', book),
   updateBook: (id, updates) => ipcRenderer.invoke('db:updateBook', id, updates),
   deleteBook: (id) => ipcRenderer.invoke('db:deleteBook', id),

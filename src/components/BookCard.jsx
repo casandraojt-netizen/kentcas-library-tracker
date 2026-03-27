@@ -6,7 +6,7 @@ function formatStatusDate(dateStr) {
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export default function BookCard({ book, onClick, onEdit, onToggleFavorite, onIncrementChapter, onClearRssUpdate, showR18 }) {
+export default function BookCard({ book, onClick, onEdit, onToggleFavorite, onIncrementChapter, onClearRssUpdate, onAuthorClick, onOpenRss, showR18 }) {
   const [imgError, setImgError] = useState(false)
   const [incrementing, setIncrementing] = useState(false)
   const statusInfo = getStatusInfo(book.status)
@@ -137,7 +137,18 @@ export default function BookCard({ book, onClick, onEdit, onToggleFavorite, onIn
           {book.title}
         </p>
         {book.author && (
-          <p className="truncate" style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif' }}>{book.author}</p>
+          onAuthorClick ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAuthorClick(book.author) }}
+              className="truncate text-left"
+              style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+            >
+              {book.author}
+            </button>
+          ) : (
+            <p className="truncate" style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif' }}>{book.author}</p>
+          )
         )}
         {book.tags && (
           <div className="flex flex-wrap gap-1 mt-1">
